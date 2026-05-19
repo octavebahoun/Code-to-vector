@@ -1,6 +1,6 @@
 {
   "name": "codetovecto",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "Scan your project and generate a vectorial database for AI chatbot",
   "author": "Octave Precieux Mahunan BAHOUN-HOUTOUKPE",
   "license": "MIT",
