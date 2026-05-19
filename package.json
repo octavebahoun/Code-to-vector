@@ -1,12 +1,12 @@
 {
   "name": "codetovecto",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Scan your project and generate a vectorial database for AI chatbot",
   "author": "Octave Precieux Mahunan BAHOUN-HOUTOUKPE",
   "license": "MIT",
   "type": "commonjs",
   "bin": {
-    "codetovecto": "./bin/cli.js"
+    "codetovecto": "bin/cli.js"
   },
   "keywords": [
     "ai",
@@ -15,6 +15,12 @@
     "cli",
     "embedding",
     "rag"
+  ],
+  "main": "src/index.js",
+  "files": [
+    "bin",
+    "src",
+    "templates"
   ],
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1"

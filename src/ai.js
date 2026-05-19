@@ -10,7 +10,7 @@ module.exports = async function (result) {
 
     if (!apiKey) {
         console.log(" AI_API_KEY manquant dans .env");
-        process.exit(0);
+        process.exit(1);
     }
 
     const responses = [];
