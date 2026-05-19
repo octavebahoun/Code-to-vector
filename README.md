@@ -1,139 +1,144 @@
 # codetovecto
 
-Outil CLI pour scanner un projet (frontend/backend/fullstack), analyser les fichiers via un LLM, et générer une sortie exploitable (JSON ou “Chroma JSON”).
+> Scanne ton projet et génère une base de données vectorielle prête pour un chatbot IA.
 
-## Objectif
-
-- Scanner des dossiers configurés
-- Extraire le contenu des fichiers pertinents
-- Envoyer le contenu à un modèle (OpenRouter) pour obtenir une analyse
-- Exporter un artefact (JSON) pour alimenter une future étape RAG / vector store
+---
 
 ## Installation
 
-Avec pnpm :
-
 ```bash
-pnpm install
+npm install -g codetovecto
 ```
-
-## Usage
-
-1) Initialiser la config :
-
-```bash
-node bin/cli.js init
-```
-
-2) Lancer le scan :
-
-```bash
-node bin/cli.js run --frontend
-# ou
-node bin/cli.js run --backend
-# ou
-node bin/cli.js run --fullstack
-```
-
-## Configuration
-
-- Le template est dans `templates/codetovecto.config.js`
-- La config générée par init est dans `codetovecto.config.js`
-
-Champs importants :
-- `mode` : `frontend` | `backend` | `fullstack`
-- `output` : `json` | `chroma`
-- `frontend` / `backend` : chemins de dossiers à scanner
-
-## Sorties
-
-Actuellement, les sorties attendues sont :
-- `codetovecto-output.json` : analyses “texte” par fichier
-- `codetovecto-chroma.json` : format JSON de documents + metadata (ce n’est pas encore une vraie base vectorielle)
-
-Remarque : “Chroma JSON” ici est un export de documents, pas des embeddings.
 
 ---
 
-# Audit & propositions d’amélioration (priorisées)
+## Démarrage rapide
 
-## P0 — Sécurité (immédiat)
+### 1. Initialise la configuration
 
-1) Ne jamais committer de secrets
-- Ajouter un `.gitignore` (au minimum : `.env`, `node_modules`, outputs).
-- Si une clé a été exposée : la révoquer/rotater immédiatement côté provider.
+```bash
+npx codetovecto init
+```
 
-2) Réduire le risque d’exfiltration de code
-- Mettre des exclusions par défaut : `node_modules`, `dist/build`, `.next`, `coverage`, `.git`, fichiers minifiés, etc.
-- Ajouter une limite : taille max par fichier + nombre max de fichiers.
-- Option “offline” (skip AI) pour juste produire l’inventaire.
+Cela génère un fichier `codetovecto.config.js` à la racine de ton projet.
 
-3) Prévenir l’envoi involontaire de secrets au LLM
-- Scanner le contenu avant envoi (patterns de clés/tokens/private keys) et soit refuser, soit masquer.
+### 2. Configure le fichier
 
-## P0 — Robustesse (bloquants fonctionnels)
+```js
+module.exports = {
+  mode: "frontend",       // frontend | backend | fullstack
+  output: "json",         // json | chroma
+  frontend: "./src",
+  backend: "./server",
+  api: "./app/api",       // si fullstack
+  views: "./app",         // si fullstack
+  php: {
+    mode: "backend"       // backend | frontend | mixed
+  }
+};
+```
 
-1) Export de sortie fiable
-- `src/output.js` doit exposer une fonction (`module.exports`) qui choisit `json` vs `chroma` selon `config.output` et écrit effectivement les fichiers.
+### 3. Configure ta clé API
 
-2) Gestion d’erreurs réseau
-- Dans `src/ai.js` : ajouter `try/catch`, `timeout`, et gestion des erreurs (429, 5xx).
-- Stratégie recommandée : continuer fichier par fichier en loggant l’erreur, plutôt que stopper tout le run.
+Crée un fichier `.env` à la racine de ton projet :
 
-3) Exit codes corrects
-- En cas d’erreur (clé manquante, config absente), retourner un code non-zéro (important pour CI / scripting).
+```env
+AI_API_KEY=sk-or-v1-xxxxxxxxxxxxxxxx
+AI_MODEL=openai/gpt-3.5-turbo
+```
 
-## P1 — Qualité des résultats LLM (fiabilité)
+> La clé API est fournie par [OpenRouter](https://openrouter.ai) — tu peux choisir n'importe quel modèle disponible.
 
-Problème observé : certaines analyses peuvent retourner du texte incohérent/bruité (hallucinations, mélange de langues, contenu “meta”).
+### 4. Lance le scan
 
-Améliorations :
-- Encadrer strictement l’entrée (délimiteurs, instructions courtes, pas de “décris la page” pour un fichier backend).
-- Forcer une sortie structurée JSON (schéma stable) et valider le JSON (sinon retry).
-- Tronquer le contenu envoyé (ex : premiers N caractères + sections pertinentes) pour réduire le bruit.
-- Ajouter un “type” plus précis (html/js/jsx/tsx) et adapter le prompt.
+```bash
+# Scanner uniquement le frontend
+npx codetovecto run --frontend
 
-## P1 — Performance / coût
+# Scanner uniquement le backend
+npx codetovecto run --backend
 
-- Traitement séquentiel = lent : ajouter une concurrence contrôlée (ex : 2–5 fichiers en parallèle) + backoff sur rate limit.
-- Mettre en cache (hash du fichier → réponse) pour éviter de repayer si le fichier n’a pas changé.
-- Ajouter un mode “dry-run” : afficher combien de fichiers seront envoyés et une estimation.
-
-## P1 — Portabilité & chemins
-
-- Éviter les tests de chemins basés sur `"/src/"` (Windows). Utiliser une normalisation de chemins ou la config (front/back) plutôt que des heuristiques.
-
-## P2 — “Vraie” vector database (alignement produit)
-
-Aujourd’hui : analyses texte.
-
-Pour “vectorial database” au sens strict :
-- Ajouter une étape de chunking (découper en segments avec metadata : `file`, `startLine/endLine`, `type`).
-- Générer des embeddings (provider au choix) sur les chunks.
-- Exporter un format vecteur : `{id, embedding: [...], document, metadata}`.
-- (Optionnel) intégrer directement un store (Chroma, Pinecone, pgvector, etc.) via un client.
-
-## P2 — DX / Maintenance
-
-- Ajouter un README “quickstart” + troubleshooting.
-- Ajouter des tests de fumée (scanner/extractor/output) pour éviter les régressions.
-- Ajouter un logger simple (niveau info/warn/error) et une option `--verbose`.
+# Scanner les deux
+npx codetovecto run --fullstack
+```
 
 ---
 
-# Roadmap (suggestion)
+## Résultat
 
-- [ ] Sécuriser secrets + `.gitignore` + exclusions
-- [ ] Stabiliser output (json/chroma) et exit codes
-- [ ] Durcir `ai.js` (timeout, retry, erreurs par fichier)
-- [ ] Sortie structurée JSON + validation
-- [ ] Cache + concurrence contrôlée
-- [ ] Chunking + embeddings + export vecteurs
+### JSON (`output: "json"`)
+
+Génère un fichier `codetovecto-output.json` :
+
+```json
+[
+  {
+    "file": "home.jsx",
+    "type": "frontend",
+    "analysis": "Page d'accueil — présente le produit, section hero, appel à l'action..."
+  }
+]
+```
+
+### Chroma (`output: "chroma"`)
+
+Génère un fichier `codetovecto-chroma.json` prêt pour une base vectorielle :
+
+```json
+{
+  "documents": [
+    {
+      "id": "doc_0",
+      "document": "Page d'accueil — présente le produit...",
+      "metadata": {
+        "file": "home.jsx",
+        "type": "frontend"
+      }
+    }
+  ]
+}
+```
 
 ---
 
-# Troubleshooting
+## Fichiers supportés
 
-- “AI_API_KEY manquant” : vérifier le fichier `.env` et les variables d’environnement.
-- “config introuvable” : lancer `init` et vérifier que `codetovecto.config.js` est à la racine du projet scanné.
-- Résultats incohérents : réduire la taille envoyée, forcer un format JSON, ou changer de modèle.
+| Extension | Support |
+|-----------|---------|
+| `.jsx`    | ✅ |
+| `.tsx`    | ✅ |
+| `.js`     | ✅ |
+| `.html`   | ✅ |
+| `.php`    | 🔜 v2 |
+
+---
+
+## Comment ça marche
+
+```
+codetovecto init
+      ↓
+Configuration du projet (mode, dossiers, output)
+      ↓
+codetovecto run --frontend
+      ↓
+Scan des fichiers (.jsx, .tsx, .js, .html)
+      ↓
+Extraction du contenu par fichier
+      ↓
+Analyse IA via OpenRouter (ton modèle, ta clé)
+      ↓
+Génération JSON ou Chroma vectorisé
+```
+
+---
+
+## Auteur
+
+**Octave Precieux Mahunan BAHOUN-HOUTOUKPE**
+
+---
+
+## Licence
+
+MIT
