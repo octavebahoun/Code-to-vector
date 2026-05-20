@@ -5,9 +5,13 @@ const chalk = require("chalk");
 function generateJSON(responses) {
   const outputPath = path.join(process.cwd(), "codetovecto-output.json");
 
-  fs.writeFileSync(outputPath, JSON.stringify(responses, null, 2));
+  try {
+    fs.writeFileSync(outputPath, JSON.stringify(responses, null, 2));
+  } catch (error) {
+    throw new Error(`Ecriture impossible: ${outputPath} - ${error.message}`);
+  }
 
-  console.log(chalk.green("✅ codetovecto-output.json généré !"));
+  console.log(chalk.green(" codetovecto-output.json généré !"));
 }
 
 function generateChroma(responses) {
@@ -23,12 +27,17 @@ function generateChroma(responses) {
 
   const outputPath = path.join(process.cwd(), "codetovecto-chroma.json");
 
-  fs.writeFileSync(outputPath, JSON.stringify({ documents }, null, 2));
+  try {
+    fs.writeFileSync(outputPath, JSON.stringify({ documents }, null, 2));
+  } catch (error) {
+    throw new Error(`Ecriture impossible: ${outputPath} - ${error.message}`);
+  }
 
-  console.log(chalk.green("✅ codetovecto-chroma.json généré !"));
+  console.log(chalk.green(" codetovecto-chroma.json généré !"));
 }
 
 module.exports = function(responses, config) {
   if (config.output === "json") return generateJSON(responses);
   if (config.output === "chroma") return generateChroma(responses);
+  throw new Error(`Output invalide: ${config.output}`);
 };
