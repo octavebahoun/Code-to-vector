@@ -1,7 +1,7 @@
 {
   "name": "codetovecto",
-  "version": "1.0.4",
-  "description": "Scan your project and generate a vectorial database for AI chatbot",
+  "version": "2.0.0",
+  "description": "Scan your project and generate a vectorial knowledge base for AI chatbot",
   "author": "Octave Precieux Mahunan BAHOUN-HOUTOUKPE",
   "license": "MIT",
   "type": "commonjs",
@@ -14,9 +14,15 @@
     "chatbot",
     "cli",
     "embedding",
-    "rag"
+    "rag",
+    "lancedb",
+    "ast"
   ],
-  "main": "src/index.js",
+  "main": "src/cli/index.js",
+  "exports": {
+    ".": "./src/cli/index.js",
+    "./search": "./src/search.js"
+  },
   "files": [
     "bin",
     "src",
@@ -26,10 +32,14 @@
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "dependencies": {
+    "@babel/parser": "^7.29.3",
+    "@lancedb/lancedb": "^0.29.0",
+    "@openrouter/sdk": "^0.12.35",
     "axios": "^1.16.1",
     "chalk": "^4.1.2",
     "commander": "^14.0.3",
     "dotenv": "^17.4.2",
-    "glob": "^13.0.6"
+    "glob": "^13.0.6",
+    "node-html-parser": "^7.1.0"
   }
 }
