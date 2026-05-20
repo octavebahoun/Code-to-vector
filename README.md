@@ -1,6 +1,24 @@
 # codetovecto
 
-> Scanne ton projet et génère une base de données vectorielle prête pour un chatbot IA.
+> Transforme ton projet en base de connaissances vectorielle locale — prête pour un chatbot IA.
+
+**codetovecto** scanne ton code source, le découpe intelligemment via AST, génère des embeddings, et les stocke dans une base vectorielle embarquée (LanceDB). Aucun serveur requis. Aucune donnée envoyée ailleurs que ta clé OpenRouter.
+
+---
+
+## Table des matières
+
+- [Installation](#installation)
+- [Démarrage rapide](#démarrage-rapide)
+- [Configuration](#configuration)
+- [Commandes](#commandes)
+- [Ce que ça génère](#ce-que-ça-génère)
+- [Utilisation dans ton projet](#utilisation-dans-ton-projet)
+- [Comment ça marche](#comment-ça-marche)
+- [Fichiers supportés](#fichiers-supportés)
+- [Fichiers ignorés](#fichiers-ignorés)
+- [Auteur](#auteur)
+- [Licence](#licence)
 
 ---
 
@@ -10,126 +28,278 @@
 npm install -g codetovecto
 ```
 
+Ou sans installation globale :
+
+```bash
+npx codetovecto
+```
+
 ---
 
 ## Démarrage rapide
 
-### 1. Initialise la configuration
+### Étape 1 — Initialise le projet
+
+Lance cette commande à la racine de ton projet :
 
 ```bash
 npx codetovecto init
 ```
 
-Cela génère un fichier `codetovecto.config.js` à la racine de ton projet.
+Deux fichiers sont générés automatiquement :
 
-### 2. Configure le fichier
+| Fichier | Rôle |
+|---|---|
+| `codetovecto.config.js` | Configuration des dossiers à scanner |
+| `codetovecto-exemple.js` | Exemple d'intégration RAG avec un LLM |
+
+---
+
+### Étape 2 — Configure les dossiers
+
+Ouvre `codetovecto.config.js` et indique les dossiers de ton projet :
 
 ```js
 module.exports = {
-  mode: "frontend",       // frontend | backend | fullstack
-  output: "json",         // json | chroma
-  frontend: "./src",
-  backend: "./server",
-  api: "./app/api",       // si fullstack
-  views: "./app",         // si fullstack
-  php: {
-    mode: "backend"       // backend | frontend | mixed
-  }
+  frontend: "./src",       // dossier frontend (React, Vue, etc.)
+  backend: "./server",     // dossier backend (Express, etc.)
 };
 ```
 
-### 3. Configure ta clé API
+---
+
+### Étape 3 — Ajoute ta clé API
 
 Crée un fichier `.env` à la racine de ton projet :
 
 ```env
-AI_API_KEY=sk-or-v1-xxxxxxxxxxxxxxxx
-AI_MODEL=openai/gpt-3.5-turbo
+OPENROUTER_API_KEY=sk-or-v1-xxxxxxxxxxxxxxxx
 ```
 
-> La clé API est fournie par [OpenRouter](https://openrouter.ai) — tu peux choisir n'importe quel modèle disponible.
+> Ta clé API est fournie gratuitement par [OpenRouter](https://openrouter.ai).
+> Les embeddings utilisent le modèle `nvidia/llama-nemotron-embed-vl-1b-v2:free` — **gratuit**.
 
-### 4. Lance le scan
+---
+
+### Étape 4 — Lance le scan
 
 ```bash
 # Scanner uniquement le frontend
-npx codetovecto run --frontend
+npx codetovecto scan --frontend
 
 # Scanner uniquement le backend
-npx codetovecto run --backend
+npx codetovecto scan --backend
 
 # Scanner les deux
-npx codetovecto run --fullstack
+npx codetovecto scan --fullstack
 ```
 
 ---
 
-## Résultat
+## Configuration
 
-### JSON (`output: "json"`)
+Voici toutes les options disponibles dans `codetovecto.config.js` :
 
-Génère un fichier `codetovecto-output.json` :
+```js
+module.exports = {
+  frontend: "./src",      // chemin vers ton dossier frontend
+  backend: "./server",    // chemin vers ton dossier backend
+};
+```
+
+Les options avancées (chemin d'export, limite de tokens, provider) se configurent via les flags CLI.
+
+---
+
+## Commandes
+
+### `codetovecto init`
+
+Initialise le projet en générant les fichiers de démarrage.
+
+```bash
+npx codetovecto init
+```
+
+---
+
+### `codetovecto scan`
+
+Lance le scan, le parsing AST, la génération des embeddings et l'export.
+
+```bash
+npx codetovecto scan [options]
+```
+
+| Option | Description | Défaut |
+|---|---|---|
+| `--frontend` | Scanner le dossier frontend | — |
+| `--backend` | Scanner le dossier backend | — |
+| `--fullstack` | Scanner frontend + backend | ✅ par défaut |
+| `--output <path>` | Chemin du fichier JSON exporté | `codetovecto-output.json` |
+| `--lancedb <path>` | Chemin de la base LanceDB | `codetovecto-lancedb/` |
+
+**Exemples :**
+
+```bash
+npx codetovecto scan --frontend
+npx codetovecto scan --fullstack --output ./data/knowledge.json
+```
+
+---
+
+## Ce que ça génère
+
+### `codetovecto-output.json`
+
+Un fichier JSON contenant tous les chunks vectorisés de ton projet :
 
 ```json
 [
   {
-    "file": "home.jsx",
-    "type": "frontend",
-    "analysis": "Page d'accueil — présente le produit, section hero, appel à l'action..."
+    "name": "useAuth",
+    "type": "arrow-function",
+    "file": "useAuth.js",
+    "path": "/src/hooks/useAuth.js",
+    "code": "const useAuth = () => { ... }",
+    "embedding": [0.021, -0.043, 0.091, "..."]
   }
 ]
 ```
 
-### Chroma (`output: "chroma"`)
+Ce fichier est portable — tu peux le versionner ou le partager.
 
-Génère un fichier `codetovecto-chroma.json` prêt pour une base vectorielle :
+---
 
-```json
+### `codetovecto-lancedb/`
+
+Une base vectorielle locale embarquée générée par [LanceDB](https://lancedb.com).
+
+```
+codetovecto-lancedb/
+└── chunks.lance/
+    ├── data/
+    ├── _transactions/
+    └── _versions/
+```
+
+- **Aucun serveur requis** — tout tourne en local
+- **Recherche en millisecondes** — même sur de grandes codebases
+- **Persistant** — le dossier se recharge à chaque appel
+
+---
+
+## Utilisation dans ton projet
+
+### Recherche vectorielle
+
+```js
+const search = require("codetovecto/search");
+
+const resultat = await search("comment fonctionne le login ?");
+
+console.log(resultat.question); // "comment fonctionne le login ?"
+console.log(resultat.context);  // tableau des chunks les plus proches
+```
+
+### Structure du résultat
+
+```js
 {
-  "documents": [
+  question: "comment fonctionne le login ?",
+  context: [
     {
-      "id": "doc_0",
-      "document": "Page d'accueil — présente le produit...",
-      "metadata": {
-        "file": "home.jsx",
-        "type": "frontend"
-      }
-    }
+      name: "handleLogin",
+      type: "arrow-function",
+      file: "auth.js",
+      path: "/src/services/auth.js",
+      code: "const handleLogin = async (email, password) => { ... }"
+    },
+    // ...4 autres chunks proches
   ]
 }
 ```
 
----
+### Options disponibles
 
-## Fichiers supportés
+```js
+const resultat = await search("ta question", {
+  dbPath: "./codetovecto-lancedb",  // chemin de la base (défaut)
+  limit: 5,                          // nombre de chunks retournés (défaut: 5)
+});
+```
 
-| Extension | Support |
-|-----------|---------|
-| `.jsx`    | ✅ |
-| `.tsx`    | ✅ |
-| `.js`     | ✅ |
-| `.html`   | ✅ |
-| `.php`    | 🔜 v2 |
+### Intégration avec un LLM
+
+Consulte le fichier `codetovecto-exemple.js` généré par `init` pour un exemple complet d'intégration avec OpenRouter, OpenAI, ou tout autre LLM.
+
+```js
+// codetovecto-exemple.js (simplifié)
+const search = require("codetovecto/search");
+
+const resultat = await search("comment fonctionne le scanner ?");
+
+const contexte = resultat.context
+  .map(c => `// ${c.file}\n${c.code}`)
+  .join("\n\n");
+
+// Injecte `contexte` dans le prompt de ton LLM
+```
 
 ---
 
 ## Comment ça marche
 
 ```
-codetovecto init
-      ↓
-Configuration du projet (mode, dossiers, output)
-      ↓
-codetovecto run --frontend
-      ↓
-Scan des fichiers (.jsx, .tsx, .js, .html)
-      ↓
-Extraction du contenu par fichier
-      ↓
-Analyse IA via OpenRouter (ton modèle, ta clé)
-      ↓
-Génération JSON ou Chroma vectorisé
+npx codetovecto scan
+         ↓
+  Scan des fichiers
+  (filtre node_modules, dist, .env...)
+         ↓
+  Lecture du contenu brut
+         ↓
+  Parsing AST
+  (Babel parser — JS, JSX, TS, TSX)
+  (node-html-parser — HTML)
+         ↓
+  Chunking intelligent
+  fonction par fonction,
+  composant par composant
+         ↓
+  Génération des embeddings
+  via OpenRouter (modèle gratuit)
+         ↓
+  Export JSON + LanceDB local
+         ↓
+  search("ta question")
+  → vecteur → similarité cosinus
+  → chunks les plus proches
+  → contexte prêt pour ton LLM
 ```
+
+---
+
+## Fichiers supportés
+
+| Extension | Type | Support |
+|---|---|---|
+| `.js` | JavaScript | ✅ |
+| `.jsx` | React | ✅ |
+| `.ts` | TypeScript | ✅ |
+| `.tsx` | React + TypeScript | ✅ |
+| `.html` | HTML | ✅ |
+| `.php` | PHP | 🔜 prochaine version |
+| `.py` | Python | 🔜 prochaine version |
+
+---
+
+## Fichiers ignorés
+
+codetovecto ignore automatiquement ces dossiers et fichiers :
+
+**Dossiers :** `node_modules`, `dist`, `.git`, `build`, `.next`
+
+**Fichiers :** `package-lock.json`, `.env`, `.env.example`, `.gitignore`
 
 ---
 
