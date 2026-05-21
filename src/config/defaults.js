@@ -14,7 +14,7 @@ module.exports = {
   ignoreDirs: ["node_modules", "dist", ".git", "build", ".next"],
 
   // Fichiers à ignorer
-  ignoreFiles: ["package-lock.json", ".env", ".env.example", ".gitignore", "*.json", "*.xml", "*.txt", "*.yaml"],
+  ignoreFiles: ["package-lock.json", ".env", ".env.example", ".gitignore", "package.json", "*.xml", "*.txt", "*.yaml"],
 
   // Taille minimale pour un chunk (filtrage préventif)
   minLines: 5,
