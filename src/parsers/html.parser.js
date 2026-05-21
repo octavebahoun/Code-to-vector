@@ -21,14 +21,14 @@ function isStructuralElement(element) {
     return false;
 }
 
-function processNode(element, fileObj, chunks) {
+function processNode(element, fileObj, chunks, config) {
     if (!element) return;
 
     // 1. D'abord traiter les enfants de manière récursive (bottom-up / depth-first)
     if (element.childNodes && element.childNodes.length > 0) {
         element.childNodes.forEach(function(child) {
             if (child.tagName) {
-                processNode(child, fileObj, chunks);
+                processNode(child, fileObj, chunks, config);
             }
         });
     }
@@ -53,23 +53,32 @@ function processNode(element, fileObj, chunks) {
 
         const index = chunks.length;
         const chunkName = `${tagName}_${index}${suffix}`;
+        const codeSnippet = element.outerHTML;
 
-        // Sauvegarde du chunk
-        chunks.push({
-            name: chunkName,
-            type: "html-" + tagName,
-            code: element.outerHTML,
-            file: fileObj.name,
-            path: fileObj.path,
-        });
+        // On vérifie la taille du chunk avant de l'enregistrer
+        const minLines = (config && typeof config.minLines === "number") ? config.minLines : 5;
+        const minChars = (config && typeof config.minCharacters === "number") ? config.minCharacters : 120;
+        
+        const linesCount = codeSnippet.split("\n").length;
+        const charsCount = codeSnippet.length;
 
-        // 3. Remplace le contenu intérieur par un commentaire indicatif 
-        // pour éviter la redondance dans le parent
-        element.innerHTML = `<!-- Chunk: ${chunkName} -->`;
+        if (linesCount >= minLines && charsCount >= minChars) {
+            // Sauvegarde du chunk
+            chunks.push({
+                name: chunkName,
+                type: "html-" + tagName,
+                code: codeSnippet,
+                file: fileObj.name,
+                path: fileObj.path,
+            });
+
+            // 3. Remplace le contenu intérieur par un commentaire indicatif uniquement si le chunk est conservé
+            element.innerHTML = `<!-- Chunk: ${chunkName} -->`;
+        }
     }
 }
 
-module.exports = function parse(fileObj) {
+module.exports = function parse(fileObj, config) {
     let root;
 
     try {
@@ -82,7 +91,7 @@ module.exports = function parse(fileObj) {
     logger.info("HTML parsé pour : " + fileObj.name);
     
     const chunks = [];
-    processNode(root, fileObj, chunks);
+    processNode(root, fileObj, chunks, config);
     
     logger.info(chunks.length + " chunks extraits de : " + fileObj.name);
     return chunks;

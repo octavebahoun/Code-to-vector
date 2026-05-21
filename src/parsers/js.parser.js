@@ -113,7 +113,24 @@ function traverserAST(node, parent, callback) {
     }
 }
 
-module.exports = function parse(fileObj) {
+function ajouterChunkSiValide(chunkData, codeSnippet, config, chunks) {
+    if (!codeSnippet) return;
+    
+    const minLines = (config && typeof config.minLines === "number") ? config.minLines : 5;
+    const minChars = (config && typeof config.minCharacters === "number") ? config.minCharacters : 120;
+    
+    const linesCount = codeSnippet.split("\n").length;
+    const charsCount = codeSnippet.length;
+    
+    if (linesCount >= minLines && charsCount >= minChars) {
+        chunks.push({
+            ...chunkData,
+            code: codeSnippet
+        });
+    }
+}
+
+module.exports = function parse(fileObj, config) {
     let ast;
 
     try {
@@ -142,88 +159,79 @@ module.exports = function parse(fileObj) {
 
     traverserAST(ast, null, function(node, parent) {
         if (node.type === "FunctionDeclaration") {
-            chunks.push({
+            ajouterChunkSiValide({
                 name: determinerNom(node, parent, fileObj),
                 type: "function",
                 params: node.params.map(extraireNomParam),
-                code: code.slice(node.start, node.end),
                 file: fileObj.name,
                 path: fileObj.path,
-            });
+            }, code.slice(node.start, node.end), config, chunks);
         }
         
         else if (node.type === "FunctionExpression" || node.type === "ArrowFunctionExpression") {
-            chunks.push({
+            ajouterChunkSiValide({
                 name: determinerNom(node, parent, fileObj),
                 type: node.type === "ArrowFunctionExpression" ? "arrow-function" : "function",
                 params: node.params.map(extraireNomParam),
-                code: code.slice(node.start, node.end),
                 file: fileObj.name,
                 path: fileObj.path,
-            });
+            }, code.slice(node.start, node.end), config, chunks);
         }
         
         else if (node.type === "ClassDeclaration") {
-            chunks.push({
+            ajouterChunkSiValide({
                 name: determinerNom(node, parent, fileObj),
                 type: "class",
                 params: [],
-                code: code.slice(node.start, node.end),
                 file: fileObj.name,
                 path: fileObj.path,
-            });
+            }, code.slice(node.start, node.end), config, chunks);
         }
         
         else if (node.type === "ClassMethod" || node.type === "MethodDefinition") {
-            // Dans Babel, ClassMethod a les params directement.
-            // Dans MethodDefinition (comme dans d'autres parseurs), les params sont dans node.value.
             const paramsNode = node.params || (node.value && node.value.params) || [];
-            chunks.push({
+            ajouterChunkSiValide({
                 name: determinerNom(node, parent, fileObj),
                 type: "method",
                 params: paramsNode.map(extraireNomParam),
-                code: code.slice(node.start, node.end),
                 file: fileObj.name,
                 path: fileObj.path,
-            });
+            }, code.slice(node.start, node.end), config, chunks);
         }
         
         else if (node.type === "ObjectMethod") {
-            chunks.push({
+            ajouterChunkSiValide({
                 name: determinerNom(node, parent, fileObj),
                 type: "method",
                 params: node.params.map(extraireNomParam),
-                code: code.slice(node.start, node.end),
                 file: fileObj.name,
                 path: fileObj.path,
-            });
+            }, code.slice(node.start, node.end), config, chunks);
         }
         
         else if (node.type === "ObjectExpression") {
             const parentType = parent && parent.type;
             if (parentType === "VariableDeclarator" || parentType === "AssignmentExpression" || parentType === "ExportDefaultDeclaration") {
-                chunks.push({
+                ajouterChunkSiValide({
                     name: determinerNom(node, parent, fileObj),
                     type: "export-object",
                     params: [],
-                    code: code.slice(node.start, node.end),
                     file: fileObj.name,
                     path: fileObj.path,
-                });
+                }, code.slice(node.start, node.end), config, chunks);
             }
         }
         
         else if (node.type === "ExportDefaultDeclaration") {
             const declType = node.declaration && node.declaration.type;
             if (declType && !CHUNKED_TYPES.includes(declType) && declType !== "ObjectExpression") {
-                chunks.push({
+                ajouterChunkSiValide({
                     name: "default_export",
                     type: "export-default",
                     params: [],
-                    code: code.slice(node.start, node.end),
                     file: fileObj.name,
                     path: fileObj.path,
-                });
+                }, code.slice(node.start, node.end), config, chunks);
             }
         }
     });

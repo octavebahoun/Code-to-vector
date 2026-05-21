@@ -15,4 +15,8 @@ module.exports = {
 
   // Fichiers à ignorer
   ignoreFiles: ["package-lock.json", ".env", ".env.example", ".gitignore"],
+
+  // Taille minimale pour un chunk (filtrage préventif)
+  minLines: 5,
+  minCharacters: 120,
 };
