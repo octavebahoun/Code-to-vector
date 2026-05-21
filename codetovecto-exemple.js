@@ -30,6 +30,8 @@ async function askAI(question, options = {}) {
             };
         }
 
+        console.log(`[INFO] Envoi de ${searchResult.context.length} chunks en contexte au LLM...`);
+
         // 2. Construire le contexte de code pour alimenter le prompt du LLM
         const contexte = searchResult.context
             .map(c => `// Fichier : ${c.file} (${c.type})\n${c.code}`)
@@ -59,10 +61,15 @@ async function askAI(question, options = {}) {
             }
         );
 
-        return {
-            answer: response.data.choices[0].message.content,
-            chunks: searchResult.context,
-        };
+        if (response.data && response.data.choices && response.data.choices[0] && response.data.choices[0].message) {
+            return {
+                answer: response.data.choices[0].message.content,
+                chunks: searchResult.context,
+            };
+        } else {
+            const apiError = response.data && response.data.error && response.data.error.message;
+            throw new Error(apiError ? `Erreur API OpenRouter : ${apiError}` : "Réponse de l'API malformée (absence du tableau choices)");
+        }
 
     } catch (error) {
         let detail = "";
