@@ -4,3 +4,8 @@
 **/.env
 **/*.log
 **/venv/
+.codetovecto-cache.json
+codetovecto-lancedb/
+codetovecto-output.json
+*.xml
+*.txt
