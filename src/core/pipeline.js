@@ -6,8 +6,15 @@ const embedder = require("./embedder");
 const jsonExporter = require("../exporters/json.exporter");
 const lanceExporter = require("../exporters/lancedb.exporter");
 const logger = require("../utils/logger");
+require("dotenv").config();
 
 module.exports = async function pipeline(folders, options) {
+    // Validation préventive de la clé d'API
+    if (!process.env.OPENROUTER_API_KEY) {
+        logger.error("La variable d'environnement OPENROUTER_API_KEY est manquante dans votre fichier .env.");
+        process.exit(1);
+    }
+
     logger.info("Démarrage du pipeline...");
 
     // 1. Scan

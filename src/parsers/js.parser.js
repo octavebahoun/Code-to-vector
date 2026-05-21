@@ -3,104 +3,114 @@ const parser = require("@babel/parser");
 const logger = require("../utils/logger");
 
 function extraireNomParam(param) {
+    if (!param) return "unknown";
     if (param.type === "Identifier") return param.name;
-    if (param.type === "AssignmentPattern") return param.left.name;
-    if (param.type === "RestElement") return "..." + param.argument.name;
+    if (param.type === "AssignmentPattern") return extraireNomParam(param.left);
+    if (param.type === "RestElement") return "..." + extraireNomParam(param.argument);
+    if (param.type === "ObjectPattern") {
+        const props = param.properties
+            .map(p => {
+                if (p.type === "ObjectProperty") return extraireNomParam(p.value || p.key);
+                if (p.type === "RestElement") return "..." + extraireNomParam(p.argument);
+                return null;
+            })
+            .filter(Boolean);
+        return "{" + props.join(", ") + "}";
+    }
+    if (param.type === "ArrayPattern") {
+        const elems = param.elements.map(e => e ? extraireNomParam(e) : "").join(", ");
+        return "[" + elems + "]";
+    }
     return "unknown";
 }
 
-function extraireFonction(node, fileObj, chunks, code) {
-    chunks.push({
-        name: node.id ? node.id.name : fileObj.name.replace(/\.[^.]+$/, ""),
-        type: "function",
-        params: node.params.map(extraireNomParam),
-        code: code,
-        file: fileObj.name,
-        path: fileObj.path,
-    });
+function getMemberExpressionString(node) {
+    if (!node) return "";
+    if (node.type === "Identifier") return node.name;
+    if (node.type === "MemberExpression") {
+        const obj = getMemberExpressionString(node.object);
+        const prop = node.computed ? "[computed]" : (node.property.name || node.property.value || "");
+        return obj ? `${obj}.${prop}` : prop;
+    }
+    return "";
 }
 
-function extraireArrow(declaration, fileObj, chunks, fullCode) {
-    const init = declaration.init;
-    if (!init) return;
-
-    if (init.type === "ArrowFunctionExpression" || init.type === "FunctionExpression") {
-        chunks.push({
-            name: declaration.id.name,
-            type: "arrow-function",
-            params: init.params.map(extraireNomParam),
-            code: fullCode.slice(declaration.start, declaration.end),
-            file: fileObj.name,
-            path: fileObj.path,
-        });
+function determinerNom(node, parent, fileObj) {
+    if (node.id && node.id.name) {
+        return node.id.name;
     }
-}
-
-function traiterNode(node, fileObj, chunks) {
-    const code = fileObj.content;
-    const fileName = fileObj.name.replace(/\.[^.]+$/, "");
-
-    if (node.type === "FunctionDeclaration" && node.id) {
-        extraireFonction(node, fileObj, chunks, code.slice(node.start, node.end));
-        return;
+    if (node.type === "ClassMethod" || node.type === "MethodDefinition" || node.type === "ObjectMethod") {
+        if (node.key) {
+            if (node.key.type === "Identifier") return node.key.name;
+            if (node.key.type === "StringLiteral") return node.key.value;
+        }
     }
-
-    if (node.type === "VariableDeclaration") {
-        node.declarations.forEach(function(declaration) {
-            extraireArrow(declaration, fileObj, chunks, code);
-        });
-        return;
-    }
-
-    if (node.type === "ExpressionStatement") {
-        const expr = node.expression;
-        if (expr.type === "AssignmentExpression") {
-            const right = expr.right;
-
-            if (right.type === "FunctionExpression" || right.type === "ArrowFunctionExpression") {
-                chunks.push({
-                    name: fileName,
-                    type: "export-function",
-                    params: right.params.map(extraireNomParam),
-                    code: code.slice(node.start, node.end),
-                    file: fileObj.name,
-                    path: fileObj.path,
-                });
+    if (parent) {
+        if (parent.type === "VariableDeclarator") {
+            if (parent.id.type === "Identifier") {
+                return parent.id.name;
             }
-
-            if (right.type === "ObjectExpression") {
-                chunks.push({
-                    name: fileName,
-                    type: "export-object",
-                    params: [],
-                    code: code.slice(node.start, node.end),
-                    file: fileObj.name,
-                    path: fileObj.path,
-                });
+            if (parent.id.type === "ObjectPattern") {
+                const names = parent.id.properties
+                    .map(p => {
+                        if (p.type === "ObjectProperty") return (p.value && p.value.name) || (p.key && p.key.name);
+                        if (p.type === "RestElement") return p.argument && p.argument.name;
+                        return null;
+                    })
+                    .filter(Boolean)
+                    .join("_");
+                return names || "destructured";
+            }
+            if (parent.id.type === "ArrayPattern") {
+                const names = parent.id.elements
+                    .map(e => e && e.name)
+                    .filter(Boolean)
+                    .join("_");
+                return names || "destructured";
             }
         }
-        return;
+        if (parent.type === "ObjectProperty") {
+            if (parent.key.type === "Identifier") return parent.key.name;
+            if (parent.key.type === "StringLiteral") return parent.key.value;
+        }
+        if (parent.type === "AssignmentExpression") {
+            if (parent.left.type === "Identifier") return parent.left.name;
+            if (parent.left.type === "MemberExpression") {
+                return getMemberExpressionString(parent.left);
+            }
+        }
+        if (parent.type === "ExportDefaultDeclaration") {
+            return "default_export";
+        }
     }
-
-    if (node.type === "ExportNamedDeclaration" && node.declaration) {
-        traiterNode(node.declaration, fileObj, chunks);
-        return;
-    }
-
-    if (node.type === "ExportDefaultDeclaration" && node.declaration) {
-        traiterNode(node.declaration, fileObj, chunks);
-        return;
-    }
+    
+    // Fallback: Nom du fichier sans extension + ligne de début
+    const baseName = fileObj.name.replace(/\.[^.]+$/, "");
+    const line = (node.loc && node.loc.start) ? `_L${node.loc.start.line}` : "";
+    return `${baseName}${line}`;
 }
 
-function extraireChunks(ast, fileObj) {
-    const chunks = [];
-
-    ast.program.body.forEach(function(node) {
-        traiterNode(node, fileObj, chunks);
-    });
-
-    return chunks;
+function traverserAST(node, parent, callback) {
+    if (!node) return;
+    
+    callback(node, parent);
+    
+    for (const key in node) {
+        if (node.hasOwnProperty(key)) {
+            const val = node[key];
+            if (val && typeof val === "object") {
+                if (Array.isArray(val)) {
+                    val.forEach(function(child) {
+                        if (child && typeof child.type === "string") {
+                            traverserAST(child, node, callback);
+                        }
+                    });
+                } else if (typeof val.type === "string") {
+                    traverserAST(val, node, callback);
+                }
+            }
+        }
+    }
 }
 
 module.exports = function parse(fileObj) {
@@ -117,5 +127,107 @@ module.exports = function parse(fileObj) {
     }
 
     logger.info("AST généré pour : " + fileObj.name);
-    return extraireChunks(ast, fileObj);
+
+    const chunks = [];
+    const code = fileObj.content;
+    const CHUNKED_TYPES = [
+        "FunctionDeclaration",
+        "FunctionExpression",
+        "ArrowFunctionExpression",
+        "ClassDeclaration",
+        "ClassMethod",
+        "MethodDefinition",
+        "ObjectMethod"
+    ];
+
+    traverserAST(ast, null, function(node, parent) {
+        if (node.type === "FunctionDeclaration") {
+            chunks.push({
+                name: determinerNom(node, parent, fileObj),
+                type: "function",
+                params: node.params.map(extraireNomParam),
+                code: code.slice(node.start, node.end),
+                file: fileObj.name,
+                path: fileObj.path,
+            });
+        }
+        
+        else if (node.type === "FunctionExpression" || node.type === "ArrowFunctionExpression") {
+            chunks.push({
+                name: determinerNom(node, parent, fileObj),
+                type: node.type === "ArrowFunctionExpression" ? "arrow-function" : "function",
+                params: node.params.map(extraireNomParam),
+                code: code.slice(node.start, node.end),
+                file: fileObj.name,
+                path: fileObj.path,
+            });
+        }
+        
+        else if (node.type === "ClassDeclaration") {
+            chunks.push({
+                name: determinerNom(node, parent, fileObj),
+                type: "class",
+                params: [],
+                code: code.slice(node.start, node.end),
+                file: fileObj.name,
+                path: fileObj.path,
+            });
+        }
+        
+        else if (node.type === "ClassMethod" || node.type === "MethodDefinition") {
+            // Dans Babel, ClassMethod a les params directement.
+            // Dans MethodDefinition (comme dans d'autres parseurs), les params sont dans node.value.
+            const paramsNode = node.params || (node.value && node.value.params) || [];
+            chunks.push({
+                name: determinerNom(node, parent, fileObj),
+                type: "method",
+                params: paramsNode.map(extraireNomParam),
+                code: code.slice(node.start, node.end),
+                file: fileObj.name,
+                path: fileObj.path,
+            });
+        }
+        
+        else if (node.type === "ObjectMethod") {
+            chunks.push({
+                name: determinerNom(node, parent, fileObj),
+                type: "method",
+                params: node.params.map(extraireNomParam),
+                code: code.slice(node.start, node.end),
+                file: fileObj.name,
+                path: fileObj.path,
+            });
+        }
+        
+        else if (node.type === "ObjectExpression") {
+            const parentType = parent && parent.type;
+            if (parentType === "VariableDeclarator" || parentType === "AssignmentExpression" || parentType === "ExportDefaultDeclaration") {
+                chunks.push({
+                    name: determinerNom(node, parent, fileObj),
+                    type: "export-object",
+                    params: [],
+                    code: code.slice(node.start, node.end),
+                    file: fileObj.name,
+                    path: fileObj.path,
+                });
+            }
+        }
+        
+        else if (node.type === "ExportDefaultDeclaration") {
+            const declType = node.declaration && node.declaration.type;
+            if (declType && !CHUNKED_TYPES.includes(declType) && declType !== "ObjectExpression") {
+                chunks.push({
+                    name: "default_export",
+                    type: "export-default",
+                    params: [],
+                    code: code.slice(node.start, node.end),
+                    file: fileObj.name,
+                    path: fileObj.path,
+                });
+            }
+        }
+    });
+
+    logger.info(chunks.length + " chunks extraits de : " + fileObj.name);
+    return chunks;
 };

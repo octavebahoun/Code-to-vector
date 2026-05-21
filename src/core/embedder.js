@@ -1,5 +1,6 @@
 // src/core/embedder.js
 const openrouterProvider = require("../providers/openrouter.provider");
+const { maskSecrets } = require("../utils/secrets");
 const logger = require("../utils/logger");
 
 // Pause en millisecondes entre chaque requête
@@ -18,7 +19,13 @@ module.exports = async function embed(chunks) {
         const chunk = chunks[i];
         logger.info("Embedding " + (i + 1) + "/" + chunks.length + " : " + chunk.name);
 
-        const vecteur = await openrouterProvider(chunk.code);
+        // Analyse et masquage des secrets potentiels dans le code avant envoi
+        const { maskedCode, detected } = maskSecrets(chunk.code);
+        if (detected) {
+            logger.warn(`⚠️ Secret détecté et masqué par mesure de sécurité dans le chunk : ${chunk.name}`);
+        }
+
+        const vecteur = await openrouterProvider(maskedCode);
 
         if (vecteur) {
             resultats.push({
@@ -26,7 +33,7 @@ module.exports = async function embed(chunks) {
                 type: chunk.type,
                 file: chunk.file,
                 path: chunk.path,
-                code: chunk.code,
+                code: maskedCode, // Sauvegarde la version masquée pour éviter les fuites en local
                 embedding: vecteur,
             });
         } else {
