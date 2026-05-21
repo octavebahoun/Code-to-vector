@@ -65,8 +65,12 @@ async function askAI(question, options = {}) {
         };
 
     } catch (error) {
+        let detail = "";
+        if (error.response && error.response.data && error.response.data.error && error.response.data.error.message) {
+            detail = ` (${error.response.data.error.message})`;
+        }
         return {
-            answer: "Une erreur est survenue lors de la génération de la réponse : " + error.message,
+            answer: "Une erreur est survenue lors de la génération de la réponse : " + error.message + detail,
             chunks: []
         };
     }
