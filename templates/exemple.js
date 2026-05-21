@@ -1,61 +1,94 @@
-// src/search.js
-const lancedb = require("@lancedb/lancedb");
+// codetovecto-exemple.js
 const axios = require("axios");
-const openrouterEmbed = require("./providers/openrouter.provider");
-const logger = require("./utils/logger");
 require("dotenv").config();
 
-module.exports = async function search(question, options) {
-    const dbPath = (options && options.dbPath) || "./codetovecto-lancedb";
-    const limit = (options && options.limit) || 5;
-    const withAnswer = (options && options.withAnswer) || false;
+// Chargement de la fonction de recherche du package codetovecto
+let search;
+try {
+    search = require("codetovecto/search");
+} catch (err) {
+    // Fallback pour le développement local dans le dépôt du package
+    search = require("./src/search");
+}
 
-    // 1. Vectoriser la question
-    const vecteur = await openrouterEmbed(question);
-    if (!vecteur) {
-        logger.error("Impossible de vectoriser la question");
-        return [];
-    }
-
-    // 2. Chercher les chunks proches
-    const db = await lancedb.connect(dbPath);
-    const table = await db.openTable("chunks");
-    const resultats = await table.vectorSearch(vecteur).limit(limit).toArray();
-    logger.info(resultats.length + " chunks trouvés pour : " + question);
-
-    if (!withAnswer) return resultats;
-
-    // 3. Construire le contexte
-    const contexte = resultats.map(function(r) {
-        return "// " + r.file + "\n" + r.code;
-    }).join("\n\n");
-
-    // 4. Envoyer au LLM
-    const response = await axios.post(
-        "https://openrouter.ai/api/v1/chat/completions",
-        {
-            model: "deepseek/deepseek-v4-flash:free",
-            messages: [
-                {
-                    role: "system",
-                    content: "Tu es un assistant qui répond sur une codebase. Utilise uniquement le contexte fourni.",
-                },
-                {
-                    role: "user",
-                    content: "Contexte:\n" + contexte + "\n\nQuestion: " + question,
-                }
-            ],
-        },
-        {
-            headers: {
-                "Authorization": "Bearer " + process.env.OPENROUTER_API_KEY,
-                "Content-Type": "application/json",
-            },
+/**
+ * Pose une question sur la codebase et retourne la réponse générée par l'IA
+ * ainsi que les morceaux de code (chunks) pertinents utilisés comme contexte.
+ * 
+ * @param {string} question La question à poser sur le code
+ * @param {object} options Options de recherche (ex: limit, dbPath)
+ * @returns {Promise<{answer: string, chunks: Array}>}
+ */
+async function askAI(question, options = {}) {
+    try {
+        // 1. Rechercher les morceaux de code pertinents dans la base vectorielle LanceDB
+        const searchResult = await search(question, options);
+        if (!searchResult || !searchResult.context || searchResult.context.length === 0) {
+            return {
+                answer: "Aucun morceau de code pertinent n'a été trouvé dans la base pour répondre à cette question.",
+                chunks: []
+            };
         }
-    );
 
-    return {
-        chunks: resultats,
-        answer: response.data.choices[0].message.content,
-    };
-};
+        // 2. Construire le contexte de code pour alimenter le prompt du LLM
+        const contexte = searchResult.context
+            .map(c => `// Fichier : ${c.file} (${c.type})\n${c.code}`)
+            .join("\n\n");
+
+        // 3. Envoyer la question avec le contexte de code au LLM (via OpenRouter)
+        const response = await axios.post(
+            "https://openrouter.ai/api/v1/chat/completions",
+            {
+                model: "deepseek/deepseek-v4-flash:free",
+                messages: [
+                    {
+                        role: "system",
+                        content: "Tu es un assistant spécialisé dans l'analyse de codebase. Réponds de façon précise et technique en te basant uniquement sur le contexte de code fourni.",
+                    },
+                    {
+                        role: "user",
+                        content: `Contexte de code :\n${contexte}\n\nQuestion : ${question}`,
+                    }
+                ],
+            },
+            {
+                headers: {
+                    "Authorization": "Bearer " + process.env.OPENROUTER_API_KEY,
+                    "Content-Type": "application/json",
+                },
+            }
+        );
+
+        return {
+            answer: response.data.choices[0].message.content,
+            chunks: searchResult.context,
+        };
+
+    } catch (error) {
+        return {
+            answer: "Une erreur est survenue lors de la génération de la réponse : " + error.message,
+            chunks: []
+        };
+    }
+}
+
+// Permet d'exécuter directement ce fichier en ligne de commande : node codetovecto-exemple.js "ma question"
+if (require.main === module) {
+    const question = process.argv[2] || "Comment est structuré le pipeline ?";
+    console.log(`Pose de la question : "${question}"...\n`);
+
+    askAI(question)
+        .then(result => {
+            console.log("=== RÉPONSE DE L'IA ===");
+            console.log(result.answer);
+            console.log("\n=== MORCEAUX DE CODE UTILISÉS ===");
+            result.chunks.forEach((c, i) => {
+                console.log(`[${i + 1}] ${c.file} -> ${c.name} (${c.type})`);
+            });
+        })
+        .catch(err => {
+            console.error("Erreur d'exécution :", err);
+        });
+}
+
+module.exports = askAI;
