@@ -41,5 +41,13 @@
     "dotenv": "^17.4.2",
     "glob": "^13.0.6",
     "node-html-parser": "^7.1.0"
+  },
+    "homepage": "https://github.com/octavebahoun/Code-to-vector",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/octavebahoun/Code-to-vector.git"
+  },
+  "bugs": {
+    "url": "https://github.com/octavebahoun/Code-to-vector/issues"
   }
 }

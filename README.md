@@ -104,6 +104,10 @@ Voici toutes les options disponibles dans `codetovecto.config.js` :
 module.exports = {
   frontend: "./src",      // chemin vers ton dossier frontend
   backend: "./server",    // chemin vers ton dossier backend
+  
+  // Options de filtrage de taille de chunk
+  minLines: 5,            // Nombre de lignes minimales pour conserver un chunk (défaut : 5)
+  minCharacters: 120,     // Nombre de caractères minimaux pour conserver un chunk (défaut : 120)
 };
 ```
 
@@ -250,13 +254,18 @@ const contexte = resultat.context
 
 ## Comment ça marche
 
+> [!TIP]
+> **Système de Cache Intelligent** : Un fichier `.codetovecto-cache.json` est généré localement. Il enregistre le hash MD5 de chaque fichier scanné avec ses chunks et embeddings. Lors des scans futurs, seuls les fichiers modifiés ou nouveaux interrogent l'API d'OpenRouter, rendant l'exécution instantanée (moins de 3 secondes pour les fichiers inchangés).
+
 ```
 npx codetovecto scan
          ↓
   Scan des fichiers
   (filtre node_modules, dist, .env...)
          ↓
-  Lecture du contenu brut
+  Vérification du cache MD5
+         ↓
+  Lecture du contenu brut (si changé)
          ↓
   Parsing AST
   (Babel parser — JS, JSX, TS, TSX)
@@ -267,7 +276,7 @@ npx codetovecto scan
   composant par composant
          ↓
   Génération des embeddings
-  via OpenRouter (modèle gratuit)
+  via OpenRouter (uniquement pour les nouveaux chunks)
          ↓
   Export JSON + LanceDB local
          ↓
@@ -299,13 +308,21 @@ codetovecto ignore automatiquement ces dossiers et fichiers :
 
 **Dossiers :** `node_modules`, `dist`, `.git`, `build`, `.next`
 
-**Fichiers :** `package-lock.json`, `.env`, `.env.example`, `.gitignore`
+**Fichiers :** `package-lock.json`, `.env`, `.env.example`, `.gitignore`, ainsi que tous les fichiers correspondant aux motifs globaux `*.json`, `*.xml` et `*.txt`.
 
 ---
 
-## Auteur
+## Author
 
-**Octave Precieux Mahunan BAHOUN-HOUTOUKPE**
+Octave Précieux Mahunan BAHOUN HOUTOUKPE
+
+- GitHub: https://github.com/octavebahoun
+- LinkedIn: https://www.linkedin.com/in/octave-précieux-mahunan-bahoun-houtoukpe-b9114b337/
+
+## Support
+
+For bugs, feature requests or collaboration:
+https://github.com/octavebahoun/Code-to-vector/issues
 
 ---
 
